@@ -7,8 +7,8 @@ const PORT = process.env.PORT || 8000;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
-const SHOW_REASONING = process.env.SHOW_REASONING === false;
-const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === false;
+const SHOW_REASONING = process.env.SHOW_REASONING === 'true';
+const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === 'true';
 
 const MODEL_MAPPING = {
   'gpt-3.5-turbo': 'meta/llama-3.1-8b-instruct',
@@ -124,7 +124,20 @@ app.post('/v1/chat/completions', async (req, res) => {
       );
 
       let responseData = response.data;
-      if (SHOW_REASONING && responseData.choices && responseData.choices[0]) {
+      
+      console.log('NVIDIA API Response:', JSON.stringify(responseData, null, 2));
+      
+      if (!responseData || !responseData.choices || !responseData.choices[0]) {
+        console.error('Invalid response structure from NVIDIA API');
+        return res.status(500).json({
+          error: {
+            message: 'Invalid response from NVIDIA API',
+            type: 'api_response_error'
+          }
+        });
+      }
+      
+      if (SHOW_REASONING && responseData.choices[0].message) {
         const originalContent = responseData.choices[0].message.content;
         responseData.choices[0].message.content = `[Reasoning enabled]\n${originalContent}`;
       }
@@ -162,4 +175,4 @@ app.listen(PORT, () => {
   if (!NVIDIA_API_KEY) {
     console.warn('WARNING: NVIDIA_API_KEY environment variable is not set!');
   }
-});
+}); 
