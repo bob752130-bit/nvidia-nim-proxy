@@ -7,8 +7,12 @@ const PORT = process.env.PORT || 8000;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
-const SHOW_REASONING = process.env.SHOW_REASONING === 'true' || false;
-const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === 'true' || false;
+const SHOW_REASONING = process.env.SHOW_REASONING === 'true';
+const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === 'true';
+
+// Default max tokens - set higher for longer responses
+// You can change this to any value, or set via environment variable
+const DEFAULT_MAX_TOKENS = parseInt(process.env.DEFAULT_MAX_TOKENS) || 4096;
 
 const MODEL_MAPPING = {
   'gpt-3.5-turbo': 'meta/llama-3.1-8b-instruct',
@@ -63,6 +67,13 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const mappedModel = MODEL_MAPPING[model] || model;
     
+    // Use DEFAULT_MAX_TOKENS if max_tokens not specified by client
+    // This ensures longer responses for all models
+    if (!max_tokens) {
+      max_tokens = DEFAULT_MAX_TOKENS;
+      console.log(`Using default max_tokens: ${max_tokens}`);
+    }
+    
     if (ENABLE_THINKING_MODE && messages && messages.length > 0) {
       const thinkingPrompt = {
         role: 'system',
@@ -81,7 +92,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       messages: messages,
       temperature: temperature || 0.7,
       top_p: top_p || 1,
-      max_tokens: max_tokens || 1024,
+      max_tokens: max_tokens,
       stream: stream || false
     };
 
@@ -89,6 +100,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       originalModel: model,
       mappedModel: mappedModel,
       messageCount: messages?.length,
+      maxTokens: nvidiaRequest.max_tokens,
       thinkingMode: ENABLE_THINKING_MODE
     });
 
@@ -125,7 +137,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
       let responseData = response.data;
       
-      console.log('NVIDIA API Response:', JSON.stringify(responseData, null, 2));
+      console.log('NVIDIA API Full Response:', JSON.stringify(responseData, null, 2));
       
       if (!responseData || !responseData.choices || !responseData.choices[0]) {
         console.error('Invalid response structure from NVIDIA API');
@@ -137,9 +149,40 @@ app.post('/v1/chat/completions', async (req, res) => {
         });
       }
       
-      if (SHOW_REASONING && responseData.choices[0].message) {
-        const originalContent = responseData.choices[0].message.content;
-        responseData.choices[0].message.content = `[Reasoning enabled]\n${originalContent}`;
+      // Handle different response formats (some models use different structures)
+      const choice = responseData.choices[0];
+      console.log('Choice object:', JSON.stringify(choice, null, 2));
+      
+      // Check if message exists and has content
+      if (!choice.message) {
+        console.error('No message in choice');
+        return res.status(500).json({
+          error: {
+            message: 'No message in API response',
+            type: 'api_response_error'
+          }
+        });
+      }
+      
+      // Handle null content by checking alternative fields
+      if (choice.message.content === null || choice.message.content === undefined) {
+        console.log('Content is null, checking alternative fields...');
+        
+        // Some models might use 'text' or other fields
+        if (choice.message.text) {
+          choice.message.content = choice.message.text;
+        } else if (choice.text) {
+          choice.message.content = choice.text;
+        } else {
+          console.error('Content is null and no alternatives found');
+          choice.message.content = '[Error: Model returned null content]';
+        }
+      }
+      
+      // Optionally show reasoning in response
+      if (SHOW_REASONING && choice.message.content) {
+        const originalContent = choice.message.content;
+        choice.message.content = `[Reasoning enabled]\n${originalContent}`;
       }
 
       res.json(responseData);
@@ -175,4 +218,4 @@ app.listen(PORT, () => {
   if (!NVIDIA_API_KEY) {
     console.warn('WARNING: NVIDIA_API_KEY environment variable is not set!');
   }
-}); 
+});
