@@ -11,7 +11,7 @@ const SHOW_REASONING = process.env.SHOW_REASONING === 'true';
 const ENABLE_THINKING_MODE = process.env.ENABLE_THINKING_MODE === 'true';
 
 // Default max tokens - set higher for longer responses
-// You can change this to any value, or set via environment variable
+// You can change this to any value, or set via environment variable ok
 const DEFAULT_MAX_TOKENS = parseInt(process.env.DEFAULT_MAX_TOKENS) || 4096;
 
 const MODEL_MAPPING = {
