@@ -96,6 +96,14 @@ app.post('/v1/chat/completions', async (req, res) => {
       stream: stream || false
     };
 
+    // Enable thinking for GLM 5.0 and 5.1
+    if (mappedModel.includes('glm5') || mappedModel.includes('glm-5')) {
+      nvidiaRequest.chat_template_kwargs = {
+        enable_thinking: true,
+        clear_thinking: false
+      };
+    }
+    
     console.log('Proxying request to NVIDIA NIM:', {
       originalModel: model,
       mappedModel: mappedModel,
